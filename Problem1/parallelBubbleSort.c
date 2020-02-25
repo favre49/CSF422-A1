@@ -59,7 +59,6 @@ int* merge(int* a, int aSize, int* b, int bSize)
 
 int main(int argc, char ** argv)
 {
-    fprintf(stderr, "I will be printed immediately\n");
     int rank = 0, numTasks=0, size=0, maxSize=0;
     int *arr = NULL;
     int* part = NULL;
@@ -71,7 +70,6 @@ int main(int argc, char ** argv)
 
     if (rank == 0)
     {
-        fprintf(stderr, "Starting file read\n");
         FILE* fptr;
         fptr = fopen("input.txt", "r");
         if (fptr == NULL)
@@ -86,7 +84,6 @@ int main(int argc, char ** argv)
         maxSize = 10;
 
         // Read data from file, and dynamically allocate required memory.
-        fprintf(stderr, "Got this far\n");
         int i = 0;
         while (!feof(fptr))
         {
@@ -99,7 +96,6 @@ int main(int argc, char ** argv)
             }
         }
         fclose(fptr);
-        fprintf(stderr, "Stopping file read\n");
     }
 
     // Broadcast the size of our input array.
