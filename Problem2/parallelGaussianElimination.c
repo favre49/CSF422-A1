@@ -5,7 +5,9 @@
 
 int main(int argc, char** argv)
 {
+    double t1, t2;
     int rank, numTasks;
+    double paratime = 0;
     int N = 0;
     float pivot = 0;
     float** arr = NULL;
@@ -15,9 +17,11 @@ int main(int argc, char** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &numTasks);
 
+    t1 = MPI_Wtime();
+
+    // Read input from file.
     if (rank == 0)
     {
-        fprintf(stderr, "Scanning file\n");
         FILE* fptr;
         fptr = fopen("input.txt", "r");
         if (fptr == NULL)
@@ -27,6 +31,8 @@ int main(int argc, char** argv)
         }
 
         fscanf(fptr, "%d", &N);
+
+        // Make data contiguous to make it easy to broadcast.
         data = (float*)malloc(N*(N+1)*sizeof(float));
         arr = (float**)malloc(N*sizeof(float*));
         for (int i = 0; i < N; i++)
@@ -39,13 +45,15 @@ int main(int argc, char** argv)
                 fscanf(fptr, "%f", &arr[i][j]);
             }
         }
-        fprintf(stderr, "DOne Scanning file\n");
     }
 
+    // Broadcast the number of linear equations to solve.
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+    // Start Gaussian Elimination.
     for (int i = 0; i < N; i++)
     {
+        // Execute serial part of the algorithm
         if (rank == 0)
         {
             int maxIdx = i;
@@ -61,11 +69,14 @@ int main(int argc, char** argv)
                 }
             }
 
+            // If the pivot is zero, the matrix is singular and cannot be solved.
             if (arr[i][maxIdx] == 0)
             {
                 fprintf(stderr, "Singular Matrix");
                 return -1;
             }
+
+            // Swap rows so that we can have the maximum element of the column in the pivot position
             if (maxIdx != i)
             {
                 for (int k = 0; k < N+1; k++)
@@ -78,12 +89,8 @@ int main(int argc, char** argv)
             pivot = arr[i][i];
         }
 
+        // Broadcast the pivot value to all processes.
         MPI_Bcast(&pivot, 1, MPI_FLOAT, 0, MPI_COMM_WORLD);
-
-        int scatterSize = (N-(i+1))/numTasks;
-        if ((N-(i+1))%numTasks)
-            scatterSize++;
-        float* part = (float*)malloc(scatterSize*(N+1)*sizeof(float));
 
         // Broadcast the pivot array
         float buf[N+1];
@@ -95,6 +102,13 @@ int main(int argc, char** argv)
             }
         }
         MPI_Bcast(buf, N+1, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+        // Find the number of rows per processor and scatter the data to them all.
+        int scatterSize = (N-(i+1))/numTasks;
+        if ((N-(i+1))%numTasks)
+            scatterSize++;
+
+        float* part = (float*)malloc(scatterSize*(N+1)*sizeof(float));
 
         MPI_Scatter(data+(i+1)*(N+1), scatterSize*(N+1), MPI_FLOAT, part, scatterSize*(N+1), MPI_FLOAT, 0, MPI_COMM_WORLD);
 
@@ -109,6 +123,9 @@ int main(int argc, char** argv)
             partSize = N-(i+1)-scatterSize*rank;
         }
 
+        if (partSize < 0)
+            partSize = 0;
+        
         // Reduce rows.
         for (int j = 0; j < partSize; j++)
         {
@@ -123,13 +140,13 @@ int main(int argc, char** argv)
         {
             if (rank%(2*j) != 0)
             {
-                MPI_Send(part, partSize*(N+1)*j, MPI_FLOAT, rank - j, 0, MPI_COMM_WORLD);
+                MPI_Send(part, partSize*(N+1), MPI_FLOAT, rank - j, 0, MPI_COMM_WORLD);
                 break;
             }
             else if (rank+j < numTasks)
             {
                 int expectedSize = 0;
-                if ((N-i) >= scatterSize * (rank+2*j))
+                if ((N-(i+1)) >= scatterSize * (rank+2*j))
                 {
                     expectedSize = scatterSize*j;
                 }
@@ -138,10 +155,16 @@ int main(int argc, char** argv)
                     expectedSize = N-(i+1)-scatterSize*(rank+j);
                 }
 
+                if (expectedSize <= 0)
+                    expectedSize = 0;
+                
                 part = (float*)realloc(part, (partSize+expectedSize)*(N+1)*sizeof(float));
                 MPI_Recv(part+partSize*(N+1), expectedSize*(N+1), MPI_FLOAT, rank+j, 0, MPI_COMM_WORLD, &status);
+                partSize += expectedSize;
             }
         }
+
+        // Assign the received rows to the array stored by process 0.
         if (rank == 0)
         {
             int startIdx = (i+1)*(N+1);
@@ -156,17 +179,9 @@ int main(int argc, char** argv)
         free(part);
     }
 
+    // Back-substitute to find the result and print it.
     if (rank == 0)
     {
-        for (int i = 0; i < N; i++)
-        {
-            for (int j = 0; j < N+1; j++)
-            {
-                printf("%F\t", arr[i][j]);
-            }
-            printf("\n");
-        }
-
         float results[N];
 
         for (int i = N-1; i >= 0; i--)
@@ -179,9 +194,13 @@ int main(int argc, char** argv)
             results[i] = results[i]/arr[i][i];
         }
 
+        t2 = MPI_Wtime();
+
         printf("Solution\n");
         for (int i = 0; i < N; i++)
             printf("%f\t",results[i]);
+
+        printf("\nTime taken is %lf", t2-t1);
     }
 
     MPI_Finalize();

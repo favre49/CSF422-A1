@@ -60,6 +60,7 @@ int* merge(int* a, int aSize, int* b, int bSize)
 int main(int argc, char ** argv)
 {
     int rank = 0, numTasks=0, size=0, maxSize=0;
+    double t1, t2;
     int *arr = NULL;
     int* part = NULL;
     int* toMerge = NULL;
@@ -68,6 +69,9 @@ int main(int argc, char ** argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &numTasks);
 
+    t1 = MPI_Wtime();
+
+    // Take input from file.
     if (rank == 0)
     {
         FILE* fptr;
@@ -101,11 +105,12 @@ int main(int argc, char ** argv)
     // Broadcast the size of our input array.
     MPI_Bcast(&size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // Scatter data
+    // Find the size of the subarrays we will be sending
     int scatterSize = size/numTasks;
     if (size % numTasks)
         scatterSize++;
 
+    // Allocate and then scatter the data.
     part = (int *)malloc(scatterSize*sizeof(int));
     MPI_Scatter(arr, scatterSize, MPI_INT, part, scatterSize, MPI_INT, 0, MPI_COMM_WORLD);
     
@@ -113,6 +118,7 @@ int main(int argc, char ** argv)
     free(arr);
     arr = NULL;
 
+    // Find the size and then bubble sort.
     int partSize = (size >= scatterSize * (rank + 1)) ? scatterSize : size - scatterSize * rank;
     bubbleSort(part, partSize);
 
@@ -143,11 +149,15 @@ int main(int argc, char ** argv)
         }
     }
 
+    t2 = MPI_Wtime();
+
     // Print sorted data!
     if (rank == 0)
     {
         for (int i = 0; i < partSize; i++)
             printf("%d\n", arr[i]);
+
+        printf("Took %lf seconds to sort", t2-t1);
     }
 
     MPI_Finalize();
