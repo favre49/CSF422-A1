@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/time.h>
 
 void swap(int* a, int* b)
 {
@@ -30,6 +31,11 @@ void bubbleSort(int* arr, int n)
 
 int main(int argc, char ** argv)
 {
+    struct timeval t1, t2;
+	double elapsedTime;	
+
+	gettimeofday(&t1, NULL);
+
     FILE* fptr;
     fptr = fopen("input.txt", "r");
     if (fptr == NULL)
@@ -59,6 +65,13 @@ int main(int argc, char ** argv)
 
     bubbleSort(arr, size);
 
+    gettimeofday(&t2, NULL);
+    elapsedTime = t2.tv_sec-t1.tv_sec;
+    elapsedTime += (t2.tv_usec-t1.tv_usec)/1000000;
+
     for (int i = 0; i < size; i++)
         printf("%d\n", arr[i]);
+    
+
+    printf("%lf\n", elapsedTime);
 }

@@ -135,46 +135,39 @@ int main(int argc, char** argv)
             part[j*(N+1)+i] = 0;
         }
 
-        // Merge rows back into final array.
-        for (int j = 1; j < numTasks; j *= 2)
+        // Merge rows back into the array.
+        if (rank != 0)
         {
-            if (rank%(2*j) != 0)
+            if (partSize != 0)
+                MPI_Send(part, partSize*(N+1), MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+        }
+        else
+        {
+            for (int j = 0; j < partSize*(N+1); j++)
             {
-                MPI_Send(part, partSize*(N+1), MPI_FLOAT, rank - j, 0, MPI_COMM_WORLD);
-                break;
+                data[(i+1)*(N+1)+j] = part[j];
             }
-            else if (rank+j < numTasks)
+
+            for (int j = 1; j < numTasks; j++)
             {
                 int expectedSize = 0;
-                if ((N-(i+1)) >= scatterSize * (rank+2*j))
+                if ((N-(i+1)) >= scatterSize*(j+1))
                 {
-                    expectedSize = scatterSize*j;
+                    expectedSize = scatterSize;
                 }
                 else
                 {
-                    expectedSize = N-(i+1)-scatterSize*(rank+j);
+                    expectedSize = N-(i+1)-scatterSize*j;
                 }
 
                 if (expectedSize <= 0)
-                    expectedSize = 0;
-                
-                part = (float*)realloc(part, (partSize+expectedSize)*(N+1)*sizeof(float));
-                MPI_Recv(part+partSize*(N+1), expectedSize*(N+1), MPI_FLOAT, rank+j, 0, MPI_COMM_WORLD, &status);
-                partSize += expectedSize;
-            }
-        }
+                {
+                    continue;
+                }
 
-        // Assign the received rows to the array stored by process 0.
-        if (rank == 0)
-        {
-            int startIdx = (i+1)*(N+1);
-            for (int k = startIdx; k < N*(N+1); k++)
-            {
-                data[k] = part[k - startIdx];
+                MPI_Recv(data+(partSize+i+1)*(N+1), expectedSize*(N+1), MPI_FLOAT, j, 0, MPI_COMM_WORLD, &status);
+                partSize+= expectedSize;
             }
-
-            for (int j = 0; j < N; j++)
-                arr[j] = &(data[(N+1)*j]);
         }
         free(part);
     }
