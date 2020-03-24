@@ -38,13 +38,9 @@ int* merge(int* a, int aSize, int* b, int bSize)
     while (i < aSize && j < bSize)
     {
         if (a[i] <= b[j])
-        {
             final[k++] = a[i++];
-        }
         else
-        {
             final[k++] = b[j++];
-        }
     }
 
     // Copy remaining elements from the arrays.
